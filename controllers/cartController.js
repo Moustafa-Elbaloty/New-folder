@@ -1,13 +1,13 @@
 const Cart = require("../models/cartModel");
+const Product = require("../models/productModel");
+
 
 // ============================
 //       GET CART
 // ============================
 exports.getCart = async (req, res) => {
   try {
-    const cart = await Cart.findOne({ user: req.user.id }).populate(
-      "items.product"
-    );
+    const cart = await Cart.findOne({ user: req.user.id }).populate("items.product");
 
     if (!cart || cart.items.length === 0) {
       return res.json({
@@ -22,7 +22,8 @@ exports.getCart = async (req, res) => {
     let totalItems = 0;
 
     cart.items.forEach((item) => {
-      if (item.product && item.product.price) {
+      // item.product قد يكون null (محذوف) فنتأكد
+      if (item.product && typeof item.product.price === "number") {
         const itemTotal = item.product.price * item.quantity;
         totalPrice += itemTotal;
         totalItems += item.quantity;
@@ -31,13 +32,14 @@ exports.getCart = async (req, res) => {
 
     res.json({
       ...cart.toObject(),
-      totalPrice: totalPrice.toFixed(2),
+      totalPrice: Number(totalPrice.toFixed(2)), // كـ Number متناسق مع الباقي
       totalItems,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
+
 
 // ============================
 //       ADD TO CART
@@ -46,69 +48,62 @@ exports.addToCart = async (req, res) => {
   try {
     const { productId, quantity } = req.body;
 
-    // التحقق من البيانات
-    if (!productId) {
-      return res.status(400).json({ message: "Product ID is required" });
+    if (!productId) return res.status(400).json({ message: "Product ID is required" });
+    if (!quantity || quantity < 1) return res.status(400).json({ message: "Quantity must be at least 1" });
+
+    // جلب المنتج والتحقق من وجوده و المخزون
+    const product = await Product.findById(productId);
+    if (!product) return res.status(404).json({ message: "Product not found" });
+
+    if (quantity > product.stock) {
+      return res.status(400).json({ message: `Only ${product.stock} item(s) available in stock` });
     }
 
-    if (!quantity || quantity < 1) {
-      return res.status(400).json({ message: "Quantity must be at least 1" });
-    }
+    // جلب الكارت (مع populated products)
+    let cart = await Cart.findOne({ user: req.user.id }).populate("items.product");
 
-    // check if user has cart
-    let cart = await Cart.findOne({ user: req.user.id }).populate(
-      "items.product"
-    );
-
-    // if cart not exist create one
     if (!cart) {
-      cart = await Cart.create({
-        user: req.user.id,
-        items: [{ product: productId, quantity }],
-      });
-
-      // populate بعد الإنشاء
+      cart = await Cart.create({ user: req.user.id, items: [{ product: productId, quantity }] });
       cart = await Cart.findById(cart._id).populate("items.product");
     } else {
-      // if cart exist check if product already in cart
-      const index = cart.items.findIndex(
-        (item) => item.product.toString() === productId
-      );
+      // إيجاد المنتج في الكارت (التعامل مع populated or ObjectId)
+      const index = cart.items.findIndex(item => {
+        const existingId = item.product && item.product._id ? item.product._id.toString() : item.product.toString();
+        return existingId === productId;
+      });
 
       if (index > -1) {
-        // product already in cart -> update qty
-        cart.items[index].quantity += quantity;
+        const newQty = cart.items[index].quantity + quantity;
+        if (newQty > product.stock) {
+          return res.status(400).json({
+            message: `Only ${product.stock} item(s) available in stock. You already have ${cart.items[index].quantity} in cart.`,
+          });
+        }
+        cart.items[index].quantity = newQty;
       } else {
-        // product not in cart -> add it
         cart.items.push({ product: productId, quantity });
       }
 
       await cart.save();
-      // populate بعد الحفظ
       cart = await Cart.findById(cart._id).populate("items.product");
     }
 
-    // حساب الـ total
+    // حساب المجموع
     let totalPrice = 0;
     let totalItems = 0;
-
     cart.items.forEach((item) => {
       if (item.product && item.product.price) {
-        const itemTotal = item.product.price * item.quantity;
-        totalPrice += itemTotal;
+        totalPrice += item.product.price * item.quantity;
         totalItems += item.quantity;
       }
     });
 
-    res.json({
-      ...cart.toObject(),
-      totalPrice: totalPrice.toFixed(2),
-      totalItems,
-    });
+    res.json({ ...cart.toObject(), totalPrice: Number(totalPrice.toFixed(2)), totalItems });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
+
 
 // ============================
 //    UPDATE CART ITEM QUANTITY
@@ -118,54 +113,47 @@ exports.updateCartItem = async (req, res) => {
     const { productId } = req.params;
     const { quantity } = req.body;
 
-    // التحقق من البيانات
-    if (!quantity || quantity < 1) {
-      return res.status(400).json({ message: "Quantity must be at least 1" });
+    if (!quantity || quantity < 1) return res.status(400).json({ message: "Quantity must be at least 1" });
+
+    // جلب المنتج للتحقق من الستوك
+    const product = await Product.findById(productId);
+    if (!product) return res.status(404).json({ message: "Product not found" });
+
+    if (quantity > product.stock) {
+      return res.status(400).json({ message: `Only ${product.stock} item(s) available in stock` });
     }
 
     const cart = await Cart.findOne({ user: req.user.id });
+    if (!cart) return res.status(404).json({ message: "Cart not found" });
 
-    if (!cart) {
-      return res.status(404).json({ message: "Cart not found" });
-    }
+    // إيجاد العنصر في الكارت (تعامل مع populated or ObjectId)
+    const item = cart.items.find(it => {
+      const existingId = it.product && it.product._id ? it.product._id.toString() : it.product.toString();
+      return existingId === productId;
+    });
 
-    // البحث عن المنتج في الكارت
-    const item = cart.items.find(
-      (item) => item.product.toString() === productId
-    );
+    if (!item) return res.status(404).json({ message: "Product not found in cart" });
 
-    if (!item) {
-      return res.status(404).json({ message: "Product not found in cart" });
-    }
-
-    // تحديث الكمية
     item.quantity = quantity;
     await cart.save();
 
-    // populate بعد الحفظ
     const updatedCart = await Cart.findById(cart._id).populate("items.product");
 
-    // حساب الـ total
     let totalPrice = 0;
     let totalItems = 0;
-
-    updatedCart.items.forEach((item) => {
-      if (item.product && item.product.price) {
-        const itemTotal = item.product.price * item.quantity;
-        totalPrice += itemTotal;
-        totalItems += item.quantity;
+    updatedCart.items.forEach((it) => {
+      if (it.product && it.product.price) {
+        totalPrice += it.product.price * it.quantity;
+        totalItems += it.quantity;
       }
     });
 
-    res.json({
-      ...updatedCart.toObject(),
-      totalPrice: totalPrice.toFixed(2),
-      totalItems,
-    });
+    res.json({ ...updatedCart.toObject(), totalPrice: Number(totalPrice.toFixed(2)), totalItems });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
+
 
 // ============================
 //     REMOVE ITEM FROM CART
@@ -193,7 +181,7 @@ exports.removeFromCart = async (req, res) => {
     let totalItems = 0;
 
     cart.items.forEach((item) => {
-      if (item.product && item.product.price) {
+      if (item.product && typeof item.product.price === "number") {
         const itemTotal = item.product.price * item.quantity;
         totalPrice += itemTotal;
         totalItems += item.quantity;
@@ -202,7 +190,7 @@ exports.removeFromCart = async (req, res) => {
 
     res.json({
       ...cart.toObject(),
-      totalPrice: totalPrice.toFixed(2),
+      totalPrice: Number(totalPrice.toFixed(2)),
       totalItems,
     });
   } catch (err) {
