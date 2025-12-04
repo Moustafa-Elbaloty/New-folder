@@ -187,6 +187,12 @@ exports.updateOrderStatus = async (req, res) => {
     order.orderStatus = status;
     await order.save();
 
+    req.io.emit("new-order", {
+      message: `New order by ${req.user.name}`,
+      orderId: order._id,
+      amount: order.amount,
+    });
+    
     res.json({ message: "Order status updated", order });
   } catch (err) {
     res.status(500).json({ message: err.message });
