@@ -50,6 +50,11 @@ const addProduct = async (req, res) => {
     vendor.products.push(product._id);
     await vendor.save();
 
+    req.io.emit("new-product", {
+      message: `New product added: ${product.name}`,
+      productId: product._id,
+     });
+    
     res.status(201).json({
       success: true,
       message: "New product added successfully!",
@@ -84,6 +89,10 @@ const updateProduct = async (req, res) => {
     }
     // update product //
     const updatedProduct = await productModel.findByIdAndUpdate(id, req.body, { new: true })
+    req.io.emit("update-product", {
+      message: `Product updated: ${updatedProduct.name}`,
+      productId: updatedProduct._id,
+    });
     res.status(200).json({ success: true, message: "product updated successfully!", data: updatedProduct })
 
   } catch (error) {
@@ -132,7 +141,10 @@ const deleteProduct = async (req, res) => {
     await vendorModel.findByIdAndUpdate(product.vendor, {
       $pull: { products: product._id }
     });
-
+    req.io.emit("delete-product", {
+      message: `Product deleted: ${product.name}`,
+      productId: product._id,
+    });
     res.status(200).json({ success: true, message: "Product deleted" });
 
   } catch (error) {
