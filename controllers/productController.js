@@ -1,75 +1,100 @@
 const productModel = require("../models/productModel");
 const vendorModel = require("../models/vendorModel");
 
-// Add Product //
+// Add Product (improved)
 const addProduct = async (req, res) => {
   try {
-
-    // Only vendors or admins can add a product
-    if (req.user.role !== "vendor" && req.user.role !== "admin") {
-      return res.status(403).json({
-        success: false, message: "Only vendors or admins can add products",
-      });
+    // Authorization
+    if (!req.user || (req.user.role !== "vendor" && req.user.role !== "admin")) {
+      return res.status(403).json({ success: false, message: "Only vendors or admins can add products" });
     }
 
-    // extract the fields
-    const { name, price, description, category, stock, image, } = req.body;
+    // debug logs (يمكن ازالتها بعد التأكد)
+    console.log(">>> addProduct debug");
+    console.log("req.user:", req.user);
+    console.log("req.body:", req.body);
+    console.log("req.file:", req.file);
+    console.log("<<< end debug");
 
-    // check all fields
-    if (!name || !price || !description || !category || stock == null || !image) {
-      return res.status(403).json({
+    // extract fields
+    const { name, price, description, category, stock, brand } = req.body;
+
+    // جمع الحقول المفقودة عشان نعرض رسالة واضحة
+    const missing = [];
+    if (!name) missing.push("name");
+    if (!price) missing.push("price");
+    if (!description) missing.push("description");
+    if (!category) missing.push("category");
+    if (stock == null || stock === "") missing.push("stock");
+    if (!brand) missing.push("brand");
+
+    if (missing.length > 0) {
+      return res.status(400).json({
         success: false,
-        message: "All fields are required",
+        message: "Missing required fields",
+        missingFields: missing
       });
     }
 
-    // vendor id from logged-in user
-    const vendorId = req.user.id;
+    // file check (Multer)
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "Image file is required" });
+    }
 
-    // check if vendor exists
+    // تحويل القيم لأن form-data يجيب القيم كنصوص
+    const priceNumber = Number(price);
+    const stockNumber = Number(stock);
+
+    if (Number.isNaN(priceNumber) || priceNumber < 0) {
+      return res.status(400).json({ success: false, message: "Invalid price" });
+    }
+    if (!Number.isInteger(stockNumber) || stockNumber < 0) {
+      return res.status(400).json({ success: false, message: "Invalid stock" });
+    }
+
+    const imagePath = `/uploads/${req.file.filename}`;
+
+    // العثور على vendor
     const vendor = await vendorModel.findOne({ user: req.user.id });
-
     if (!vendor) {
-      return res.status(404).json({
-        success: false,
-        message: "Vendor not found"
-      });
+      return res.status(404).json({ success: false, message: "Vendor not found" });
     }
-    // create product
+
+    // إنشاء المنتج
     const product = await productModel.create({
-      name,
-      price,
-      description,
-      category,
-      stock,
-      image,
+      name: name.trim(),
+      price: priceNumber,
+      description: description.trim(),
+      category: category.trim(),
+      stock: stockNumber,
+      brand: brand.trim(),
+      image: imagePath,
       vendor: vendor._id,
     });
 
-    // add product to vendor product list
+    // إضافة للـ vendor.products
     vendor.products.push(product._id);
     await vendor.save();
 
+    // optional: emit socket event
+    if (req.io && typeof req.io.emit === "function") {
+      req.io.emit("new-product", {
+        message: `New product added: ${product.name}`,
+        productId: product._id,
+      });
+    }
 
-req.io.emit("new-product", {
-  message: `New product added: ${product.name}`,
-  productId: product._id,
-});
-
-    res.status(201).json({
-      success: true,
-      message: "New product added successfully!",
-      data: product,
-    });
+    res.status(201).json({ success: true, message: "New product added successfully!", data: product });
 
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "error adding product",
-      error: error.message,
-    });
+    console.error("addProduct error:", error);
+    if (error.code === 11000) {
+      return res.status(409).json({ success: false, message: "Duplicate product", error: error.keyValue });
+    }
+    res.status(500).json({ success: false, message: "error adding product", error: error.message });
   }
 };
+
 
 // Update product //
 const updateProduct = async (req, res) => {
