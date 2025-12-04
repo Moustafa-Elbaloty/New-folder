@@ -203,4 +203,40 @@ const getVendorDashboard = async (req, res) => {
   }
 };
 
-module.exports = { createVendor, getVendorProfile, updateVendor, deleteVendor, getVendorProducts, getVendorDashboard }
+const getAllVendors = async (req, res) => {
+  try {
+
+    const vendors = await vendorModel.find().populate("user", "name email role");
+    res.status(200).json({ success: true, message: "All vendors fetched", data: vendors });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error fetching vendors", error: error.message });
+  }
+};
+
+const deleteAnyVendor = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const vendor = await vendorModel.findById(id);
+    if (!vendor) return res.status(404).json({ success: false, message: "Vendor not found" });
+
+    await vendorModel.deleteOne({ _id: id });
+    await userModel.findByIdAndUpdate(vendor.user, { role: "user" });
+
+    res.status(200).json({ success: true, message: "Vendor deleted by admin" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error deleting vendor", error: error.message });
+  }
+};
+const getAnyVendorProducts = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const vendor = await vendorModel.findById(id).populate("products");
+    if (!vendor) return res.status(404).json({ success: false, message: "Vendor not found" });
+
+    res.status(200).json({ success: true, count: vendor.products.length, data: vendor.products });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error fetching vendor products", error: error.message });
+  }
+};
+
+module.exports = {getAllVendors, deleteAnyVendor, getAnyVendorProducts,  createVendor, getVendorProfile, updateVendor, deleteVendor, getVendorProducts, getVendorDashboard }
