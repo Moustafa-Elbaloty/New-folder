@@ -3,13 +3,11 @@ const router = express.Router();
 const { registerUser, loginUser } = require("../controllers/authController");
 const { protect } = require("../middleware/authMiddleware");
 
-// 🧍‍♂️ تسجيل مستخدم جديد
 router.post("/register", registerUser);
 
-// 🔑 تسجيل الدخول
 router.post("/login", loginUser);
 
-// 👤 راوت محمي (فقط للمستخدم اللي معاه توكن)
+
 router.get("/profile", protect, (req, res) => {
   res.json({
     message: `مرحبًا يا ${req.user.name} `,

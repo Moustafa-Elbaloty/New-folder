@@ -11,7 +11,6 @@ const protect = async (req, res, next) => {
     try {
       token = req.headers.authorization.split(" ")[1];
 
-      // فك التوكن
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
 
@@ -50,12 +49,10 @@ const verifyAdmin = async (req, res, next) => {
         return res.status(401).json({ message: "❌ المستخدم مش موجود" });
       }
 
-      // التحقق من الدور
       if (user.role !== "admin") {
         return res.status(403).json({ message: "🔒 مفيش صلاحية للأدمن فقط" });
       }
 
-      // إذا كل شيء تمام
       req.user = user;
       next();
     } catch (error) {
