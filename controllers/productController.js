@@ -50,11 +50,12 @@ const addProduct = async (req, res) => {
     vendor.products.push(product._id);
     await vendor.save();
 
-    req.io.emit("new-product", {
-      message: `New product added: ${product.name}`,
-      productId: product._id,
-     });
-    
+
+req.io.emit("new-product", {
+  message: `New product added: ${product.name}`,
+  productId: product._id,
+});
+
     res.status(201).json({
       success: true,
       message: "New product added successfully!",
@@ -101,6 +102,8 @@ const updateProduct = async (req, res) => {
 
 };
 
+
+
 // delete product 
 const deleteProduct = async (req, res) => {
   try {
@@ -141,6 +144,7 @@ const deleteProduct = async (req, res) => {
     await vendorModel.findByIdAndUpdate(product.vendor, {
       $pull: { products: product._id }
     });
+
     req.io.emit("delete-product", {
       message: `Product deleted: ${product.name}`,
       productId: product._id,
@@ -221,4 +225,50 @@ const getProducts = async (req, res) => {
   }
 };
 
-module.exports = { addProduct, updateProduct, deleteProduct, getProducts };
+const getAllProductsAdmin = async (req, res) => {
+  try {
+    const products = await productModel.find().populate('vendor', 'name email');
+    res.status(200).json({
+      success: true,
+      message: "All products fetched",
+      data: products
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Error fetching products",
+      error: error.message
+    });
+  }
+};
+
+const getProductByID = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // جلب المنتج مع معلومات البائع
+    const product = await productModel.findById(id).populate('vendor', 'name email');
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found"
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Product fetched successfully",
+      data: product
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Error fetching product",
+      error: error.message
+    });
+  }
+};
+
+
+module.exports = { addProduct, updateProduct, deleteProduct, getProducts, getAllProductsAdmin, getProductByID };
