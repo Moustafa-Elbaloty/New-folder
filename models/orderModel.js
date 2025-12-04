@@ -49,6 +49,17 @@ const orderSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    // 🟢 مبلغ العمولة
+    adminCommission: {
+      type: Number,
+      default: 0,
+    },
+
+    // 🟢 المبلغ الصافي للبائع
+    sellerAmount: {
+      type: Number,
+      default: 0,
+    },
     // حالة الطلب نفسها
     orderStatus: {
       type: String,
