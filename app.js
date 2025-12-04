@@ -4,11 +4,14 @@ const connectDB = require("./config/db");
 const cors = require("cors");
 const http = require("http");
 const { Server } = require("socket.io");
+const path = require("path");
 dotenv.config();
 const PORT = process.env.PORT || 5000;
 const app = express();
 app.use(express.json());
 
+// Make uploads folder public
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 app.use(cors({
   origin: "http://localhost:4200",
