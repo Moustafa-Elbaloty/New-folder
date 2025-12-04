@@ -147,4 +147,5 @@ const makeVendorByAdmin = async (req, res) => {
 
 
 
-module.exports = {getAllUsers, updateUser, deleteUser, getUser};
+module.exports = {getAllUsers, updateUser, deleteUser, getUser, makeVendorByAdmin};
+
