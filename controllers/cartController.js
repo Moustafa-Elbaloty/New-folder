@@ -222,15 +222,40 @@ exports.removeFromCart = async (req, res) => {
 
 exports.getAllCarts = async (req, res) => {
   try {
-    const carts = await Cart.find().populate("items.product user", "name email");
-    res.status(200).json({ success: true, message: "All carts fetched", data: carts });
+    if(req.user.role !== "admin"){
+      return  res.status(403).json({ success: false, message: "Access denied: insufficient permissions" });
+    }
+    const carts = await Cart.find()
+      .populate("user", "name email role")          // معلومات المستخدم
+      .populate("items.product", "name price image") // معلومات المنتجات
+      .lean();
+    const cartsWithTotal = carts.map(cart => {
+      const totalAmount = cart.items.reduce((sum, item) => {
+        return sum + (item.product?.price || 0) * item.quantity;
+      }, 0);
+      return { ...cart._doc, totalAmount };
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "All carts fetched successfully",
+      data: cartsWithTotal,
+    });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({
+      success: false,
+      message: "Server error while fetching carts",
+      error: err.message,
+    });
   }
 };
 
+
 exports.deleteCart = async (req, res) => {
   try {
+    if(req.user.role !== "admin"){
+      return  res.status(403).json({ success: false, message: "Access denied: insufficient permissions" });
+    }
     const { userId } = req.params;
     const cart = await Cart.findOneAndDelete({ user: userId });
 
