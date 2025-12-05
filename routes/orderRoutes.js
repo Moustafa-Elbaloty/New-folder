@@ -10,7 +10,7 @@ const {
   updateOrderStatus,
   getAllOrders
 } = require("../controllers/orderController");
-const {verifyAdmin} = require("../middleware/authMiddleware");
+const {authorizeRole} = require("../middleware/roleMiddleware");
 
 // ميدل وير الحماية الموحد
 const { protect } = require("../middleware/authMiddleware");
@@ -31,6 +31,8 @@ router.put("/:id/status", protect, updateOrderStatus);
 router.get("/:id", protect, getOrderById);
 
 // Admin routes
-router.get("/orders", protect, verifyAdmin, getAllOrders);
-router.get("/order/:id", protect, verifyAdmin, getOrderById); 
+// GET /api/orders/
+router.get("/orders", protect, authorizeRole("admin"), getAllOrders);
+// GET /api/orders/:id
+router.get("/order/:id", protect, authorizeRole("admin"), getOrderById); 
 module.exports = router;
