@@ -205,11 +205,24 @@ const getVendorDashboard = async (req, res) => {
 
 const getAllVendors = async (req, res) => {
   try {
+    if (req.user.role !== "admin") 
+      return res.status(403).json({ message: "Access denied" });
 
-    const vendors = await vendorModel.find().populate("user", "name email role");
-    res.status(200).json({ success: true, message: "All vendors fetched", data: vendors });
+    const vendors = await vendorModel
+      .find()
+      .populate("user", "name email role");
+
+    res.status(200).json({
+      success: true,
+      message: "All vendors fetched successfully",
+      data: vendors,
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Error fetching vendors", error: error.message });
+    res.status(500).json({
+      success: false,
+      message: "Error fetching vendors",
+      error: error.message,
+    });
   }
 };
 
