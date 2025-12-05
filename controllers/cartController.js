@@ -5,11 +5,22 @@ const Cart = require("../models/cartModel");
 // ============================
 exports.getCart = async (req, res) => {
   try {
-    const cart = await Cart.findOne({ user: req.user.id }).populate(
-      "items.product"
-    );
+    let id;
 
-    if (!cart || cart.items.length === 0) {
+    // 🧠 تحديد الـ ID بناءً على الدور
+    if (req.user.role === "admin") {
+      // لو عايزين admin يجيب cart لأي user، ممكن ياخد id من params
+      id = req.params.userId;
+      if (!id) {
+        return res.status(400).json({ message: "User ID is required for admin." });
+      }
+    } else if(req.user.role === "user") {
+      id = req.user.id;
+    }
+
+    const cart = await Cart.findOne({ user: id }).populate("items.product");
+
+    if (!cart || !cart.items || cart.items.length === 0) {
       return res.json({
         items: [],
         totalItems: 0,
@@ -39,198 +50,156 @@ exports.getCart = async (req, res) => {
   }
 };
 
+
 // ============================
 //       ADD TO CART
 // ============================
 exports.addToCart = async (req, res) => {
   try {
     const { productId, quantity } = req.body;
+    const { userId } = req.params; // للأدمن
 
-    // التحقق من البيانات
-    if (!productId) {
-      return res.status(400).json({ message: "Product ID is required" });
-    }
+    if (!productId) return res.status(400).json({ message: "Product ID is required" });
+    if (!quantity || quantity < 1) return res.status(400).json({ message: "Quantity must be at least 1" });
 
-    if (!quantity || quantity < 1) {
-      return res.status(400).json({ message: "Quantity must be at least 1" });
-    }
+    // تحديد الـ ID بناءً على الدور
+    let id = req.user.role === "admin" && userId ? userId : req.user.id;
 
-    // check if user has cart
-    let cart = await Cart.findOne({ user: req.user.id }).populate(
-      "items.product"
-    );
+    let cart = await Cart.findOne({ user: id }).populate("items.product");
 
-    // if cart not exist create one
     if (!cart) {
-      cart = await Cart.create({
-        user: req.user.id,
-        items: [{ product: productId, quantity }],
-      });
-
-      // populate بعد الإنشاء
+      cart = await Cart.create({ user: id, items: [{ product: productId, quantity }] });
       cart = await Cart.findById(cart._id).populate("items.product");
     } else {
-      // if cart exist check if product already in cart
-      const index = cart.items.findIndex(
-        (item) => item.product.toString() === productId
-      );
-
-      if (index > -1) {
-        // product already in cart -> update qty
-        cart.items[index].quantity += quantity;
-      } else {
-        // product not in cart -> add it
-        cart.items.push({ product: productId, quantity });
-      }
-
+      const index = cart.items.findIndex(item => item.product.toString() === productId);
+      if (index > -1) cart.items[index].quantity += quantity;
+      else cart.items.push({ product: productId, quantity });
       await cart.save();
-      // populate بعد الحفظ
       cart = await Cart.findById(cart._id).populate("items.product");
     }
 
-    // حساب الـ total
-    let totalPrice = 0;
-    let totalItems = 0;
-
-    cart.items.forEach((item) => {
+    let totalPrice = 0, totalItems = 0;
+    cart.items.forEach(item => {
       if (item.product && item.product.price) {
-        const itemTotal = item.product.price * item.quantity;
-        totalPrice += itemTotal;
+        totalPrice += item.product.price * item.quantity;
         totalItems += item.quantity;
       }
     });
 
     req.io.emit("cart-updated", {
-      message: `Cart updated for user ${req.user.id}`,
+      message: `Cart updated for user ${id}`,
       cartId: cart._id,
       totalItems: cart.items.length,
     });
 
-    res.json({
-      ...cart.toObject(),
-      totalPrice: totalPrice.toFixed(2),
-      totalItems,
-    });
+    res.json({ ...cart.toObject(), totalPrice: totalPrice.toFixed(2), totalItems });
+
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
+
 
 // ============================
 //    UPDATE CART ITEM QUANTITY
 // ============================
 exports.updateCartItem = async (req, res) => {
   try {
-    const { productId } = req.params;
+    const { productId, userId } = req.params;
     const { quantity } = req.body;
 
-    // التحقق من البيانات
-    if (!quantity || quantity < 1) {
-      return res.status(400).json({ message: "Quantity must be at least 1" });
-    }
+    if (!quantity || quantity < 1) return res.status(400).json({ message: "Quantity must be at least 1" });
 
-    const cart = await Cart.findOne({ user: req.user.id });
+    const id = req.user.role === "admin" && userId ? userId : req.user.id;
 
-    if (!cart) {
-      return res.status(404).json({ message: "Cart not found" });
-    }
+    const cart = await Cart.findOne({ user: id });
+    if (!cart) return res.status(404).json({ message: "Cart not found" });
 
-    // البحث عن المنتج في الكارت
-    const item = cart.items.find(
-      (item) => item.product.toString() === productId
-    );
+    const item = cart.items.find(item => item.product.toString() === productId);
+    if (!item) return res.status(404).json({ message: "Product not found in cart" });
 
-    if (!item) {
-      return res.status(404).json({ message: "Product not found in cart" });
-    }
-
-    // تحديث الكمية
     item.quantity = quantity;
     await cart.save();
 
-    // populate بعد الحفظ
     const updatedCart = await Cart.findById(cart._id).populate("items.product");
 
-    // حساب الـ total
-    let totalPrice = 0;
-    let totalItems = 0;
-
-    updatedCart.items.forEach((item) => {
+    let totalPrice = 0, totalItems = 0;
+    updatedCart.items.forEach(item => {
       if (item.product && item.product.price) {
-        const itemTotal = item.product.price * item.quantity;
-        totalPrice += itemTotal;
+        totalPrice += item.product.price * item.quantity;
         totalItems += item.quantity;
       }
     });
 
-    res.json({
-      ...updatedCart.toObject(),
-      totalPrice: totalPrice.toFixed(2),
-      totalItems,
-    });
+    res.json({ ...updatedCart.toObject(), totalPrice: totalPrice.toFixed(2), totalItems });
+
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
+
 
 // ============================
 //     REMOVE ITEM FROM CART
 // ============================
 exports.removeFromCart = async (req, res) => {
   try {
-    const { productId } = req.params;
+    const { productId, userId } = req.params; // هنا خدنا userId من params
+    const id = req.user.role === "admin" && userId ? userId : req.user.id;
 
     const cart = await Cart.findOneAndUpdate(
-      { user: req.user.id },
+      { user: id },
       { $pull: { items: { product: productId } } },
       { new: true }
     ).populate("items.product");
 
-    if (!cart || cart.items.length === 0) {
-      return res.json({
-        items: [],
-        totalItems: 0,
-        totalPrice: 0,
-      });
+    if (!cart || !cart.items || cart.items.length === 0) {
+      return res.json({ items: [], totalItems: 0, totalPrice: 0 });
     }
 
-    // حساب الـ total بعد الحذف
-    let totalPrice = 0;
-    let totalItems = 0;
-
-    cart.items.forEach((item) => {
+    let totalPrice = 0, totalItems = 0;
+    cart.items.forEach(item => {
       if (item.product && item.product.price) {
-        const itemTotal = item.product.price * item.quantity;
-        totalPrice += itemTotal;
+        totalPrice += item.product.price * item.quantity;
         totalItems += item.quantity;
       }
     });
+
     req.io.emit("cart-item-removed", {
-      message: `Item removed from cart for user ${req.user.id}`,
+      message: `Item removed from cart for user ${id}`,
       cartId: cart._id,
       totalItems: cart.items.length,
     });
+
     res.json({
       ...cart.toObject(),
       totalPrice: totalPrice.toFixed(2),
       totalItems,
     });
+
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
+
 exports.getAllCarts = async (req, res) => {
   try {
-    if(req.user.role !== "admin"){
-      return  res.status(403).json({ success: false, message: "Access denied: insufficient permissions" });
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied: insufficient permissions"
+      });
     }
+
     const carts = await Cart.find()
-      .populate("user", "name email role")          // معلومات المستخدم
-      .populate("items.product", "name price image") // معلومات المنتجات
+      .populate("user", "name email role")
+      .populate("items.product", "name price image")
       .lean();
+
     const cartsWithTotal = carts.map(cart => {
-      const totalAmount = cart.items.reduce((sum, item) => {
+      const items = cart.items || [];
+      const totalAmount = items.reduce((sum, item) => {
         return sum + (item.product?.price || 0) * item.quantity;
       }, 0);
       return { ...cart._doc, totalAmount };
@@ -238,17 +207,19 @@ exports.getAllCarts = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "All carts fetched successfully",
-      data: cartsWithTotal,
+      carts: cartsWithTotal
     });
+
   } catch (err) {
+    console.error("Error fetching carts:", err);
     res.status(500).json({
       success: false,
       message: "Server error while fetching carts",
-      error: err.message,
+      error: err.message
     });
   }
 };
+
 
 
 exports.deleteCart = async (req, res) => {
@@ -256,8 +227,12 @@ exports.deleteCart = async (req, res) => {
     if(req.user.role !== "admin"){
       return  res.status(403).json({ success: false, message: "Access denied: insufficient permissions" });
     }
-    const { userId } = req.params;
-    const cart = await Cart.findOneAndDelete({ user: userId });
+    const { cartId } = req.params.cartId;
+if (!cartId) {
+  return res.status(400).json({ success: false, message: "Cart ID is required" });
+}
+    
+    const cart = await Cart.findOneAndDelete(cartId );
 
     if (!cart) {
       return res.status(404).json({ success: false, message: "Cart not found" });
