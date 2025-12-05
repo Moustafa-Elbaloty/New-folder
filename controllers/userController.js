@@ -1,13 +1,13 @@
 const User = require("../models/userModel");
-const bcrypt = require('bcryptjs');
-
+const bcrypt = require("bcryptjs");
 
 // 🟢 Get all users (Admins only)
- const getAllUsers = async (req, res) => {
+const getAllUsers = async (req, res) => {
   try {
-    const users = await User.find().select("-password"); 
-    if (users.length === 0) 
-        return res.status(404).json("Data Not found");
+    if (req.user.role !== "admin")
+      return res.status(403).json({ message: "Access denied" });
+    const users = await User.find().select("-password");
+    if (users.length === 0) return res.status(404).json("Data Not found");
     res.status(200).json(users);
   } catch (err) {
     console.error("Error fetching users:", err);
@@ -16,10 +16,11 @@ const bcrypt = require('bcryptjs');
 };
 
 // 🔵 Get single user
- const getUser = async (req, res) => {
+const getUser = async (req, res) => {
   try {
-    if(!req.params.id)
-        return res.status(404).send("Enter UserId")
+    if (req.user.role !== "admin")
+      return res.status(403).json({ message: "Access denied" });
+    if (!req.params.id) return res.status(404).send("Enter UserId");
     const user = await User.findById(req.params.id).select("-password");
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -32,13 +33,22 @@ const bcrypt = require('bcryptjs');
 };
 
 // 🟡 Update user (secure password update)
- const updateUser = async (req, res) => {
+const updateUser = async (req, res) => {
   try {
-    const id = req.params.id;
+    let id;
 
-    // تحقق من وجود الـ ID
+    // 🧠 تحديد الـ ID بناءً على الدور
+    if (req.user.role === "admin") {
+      id = req.params.id; // الأدمن يعدّل أي حد
+    } else if(req.user.role === "user") {
+      id = req.user.id; // اليوزر يعدّل نفسه فقط
+    }
+
+    // لو معملتش الكلام دا، يبقى في خطأ
     if (!id) {
-      return res.status(400).json({ message: "Please provide a valid user ID." });
+      return res
+        .status(400)
+        .json({ message: "Could not determine user ID." });
     }
 
     const updates = req.body;
@@ -54,8 +64,8 @@ const bcrypt = require('bcryptjs');
       return res.status(404).json({ message: "User not found." });
     }
 
-    // 🧠 منع تعديل email أو role إلا لو الأدمن
-    if (!req.user || req.user.role !== "admin") {
+    // 🔒 منع تعديل email أو role للمستخدم العادي
+    if (req.user.role !== "admin") {
       delete updates.email;
       delete updates.role;
     }
@@ -76,33 +86,47 @@ const bcrypt = require('bcryptjs');
       message: "User updated successfully.",
       user: updatedUser,
     });
-
   } catch (err) {
-    res.status(500).json({ message: "Server error while updating user.", error: err });
+    res
+      .status(500)
+      .json({ message: "Server error while updating user.", error: err.message });
   }
 };
+
 
 // 🔴 Delete user
 const deleteUser = async (req, res) => {
   try {
-    if(!req.params.id)
-        return res.status(400).send("user id is required");
-    const deletedUser = await User.findByIdAndDelete(req.params.id);
+    let id;
 
-    if (!deletedUser)
+    if (req.user.role === "admin") {
+      id = req.params.id; 
+      if (!id) {
+        return res.status(400).json({ message: "User ID is required for admin." });
+      }
+    } else if(req.user.role === "user") {
+      id = req.user.id;
+    }
+
+    // تنفيذ الحذف
+    const deletedUser = await User.findByIdAndDelete(id);
+
+    if (!deletedUser) {
       return res.status(404).json({ message: "User not found" });
+    }
 
-    res.status(200).json({ message: "User deleted successfully" });
+    return res.status(200).json({
+      message: "User deleted successfully",
+      deletedUser,
+    });
+
   } catch (err) {
     console.error("Error deleting user:", err);
-    res.status(500).json({ message: "Server error while deleting user" });
+    return res.status(500).json({
+      message: "Server error while deleting user"
+    });
   }
 };
 
 
-
-
-
-module.exports = {getAllUsers, updateUser, deleteUser, getUser};
-
-
+module.exports = { getAllUsers, updateUser, deleteUser, getUser };
