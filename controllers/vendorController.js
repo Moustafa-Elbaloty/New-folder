@@ -124,19 +124,29 @@ const deleteVendor = async (req, res) => {
 };
 
 
-
 // Get all products for this vendor
 const getVendorProducts = async (req, res) => {
   try {
-    const vendor = await vendorModel
-      .findOne({ user: req.user.id })
-      .populate("products"); // << هنا الحل
+    let vendor;
 
-    if (!vendor) {
-      return res.status(404).json({
-        success: false,
-        message: "Vendor not found"
-      });
+    if (req.user.role === "vendor") {
+      // التاجر -> يجيب منتجاته هو
+      vendor = await vendorModel.findOne({ user: req.user.id }).populate("products");
+
+      if (!vendor)
+        return res.status(404).json({ success: false, message: "Vendor not found" });
+
+    } else if (req.user.role === "admin") {
+      // الأدمن -> لازم ID في params
+      const { id } = req.params;
+
+      vendor = await vendorModel.findById(id).populate("products");
+
+      if (!vendor)
+        return res.status(404).json({ success: false, message: "Vendor not found" });
+
+    } else {
+      return res.status(403).json({ success: false, message: "Access denied" });
     }
 
     res.status(200).json({
@@ -228,6 +238,8 @@ const getAllVendors = async (req, res) => {
 
 const deleteAnyVendor = async (req, res) => {
   try {
+    if (req.user.role !== "admin")
+      return res.status(403).json({ message: "Access denied" });
     const { id } = req.params;
     const vendor = await vendorModel.findById(id);
     if (!vendor) return res.status(404).json({ success: false, message: "Vendor not found" });
@@ -240,16 +252,6 @@ const deleteAnyVendor = async (req, res) => {
     res.status(500).json({ success: false, message: "Error deleting vendor", error: error.message });
   }
 };
-const getAnyVendorProducts = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const vendor = await vendorModel.findById(id).populate("products");
-    if (!vendor) return res.status(404).json({ success: false, message: "Vendor not found" });
 
-    res.status(200).json({ success: true, count: vendor.products.length, data: vendor.products });
-  } catch (error) {
-    res.status(500).json({ success: false, message: "Error fetching vendor products", error: error.message });
-  }
-};
 
-module.exports = {getAllVendors, deleteAnyVendor, getAnyVendorProducts,  createVendor, getVendorProfile, updateVendor, deleteVendor, getVendorProducts, getVendorDashboard }
+  module.exports = {getAllVendors, deleteAnyVendor,  createVendor, getVendorProfile, updateVendor, deleteVendor, getVendorProducts, getVendorDashboard }
