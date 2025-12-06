@@ -7,7 +7,6 @@ const {
   updateProduct,
   deleteProduct,
   getProducts,
-  getAllProductsAdmin,
   getProductByID,
 } = require("../controllers/productController");
 const { protect } = require("../middleware/authMiddleware"); // جمعناهم هنا
@@ -48,9 +47,6 @@ router.put("/:id", protect, upload.single("image"), updateProduct);
 
 // حذف المنتج
 router.delete("/:id", protect, deleteProduct);
-
-// Admin only routes
-router.get("/adminGetProducts", protect, authorizeRole("admin"), getAllProductsAdmin);
 
 // Get single product by id (public or protected? هنا استخدمت protect+verifyAdmin سابقًا، لكن عادة GET by id يكون public)
 // لو عايزها عامة استبدل السطر التالي بـ: router.get("/:id", getProductByID);
