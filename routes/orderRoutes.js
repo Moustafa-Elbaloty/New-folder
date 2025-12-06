@@ -8,7 +8,6 @@ const {
   getOrderById,
   cancelOrder,
   updateOrderStatus,
-  getAllOrders
 } = require("../controllers/orderController");
 const {authorizeRole} = require("../middleware/roleMiddleware");
 
@@ -30,9 +29,4 @@ router.put("/:id/status", protect, updateOrderStatus);
 // GET /api/orders/:id
 router.get("/:id", protect, getOrderById);
 
-// Admin routes
-// GET /api/orders/
-router.get("/orders", protect, authorizeRole("admin"), getAllOrders);
-// GET /api/orders/:id
-router.get("/order/:id", protect, authorizeRole("admin"), getOrderById); 
 module.exports = router;
