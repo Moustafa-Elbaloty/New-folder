@@ -310,6 +310,8 @@ exports.cashPay = async (req, res) => {
 };
 exports.getAllPayments = async (req, res) => {
   try {
+    if (req.user.role !== "admin")
+      return res.status(403).json({ message: "Access denied" });
     const payments = await Payment.find()
       .populate({ path: "user", select: "name email role" })
       .populate({ path: "order", select: "totalPrice paymentStatus orderStatus" })
@@ -328,5 +330,64 @@ exports.getAllPayments = async (req, res) => {
       message: "Error fetching payments",
       error: err.message,
     });
+  }
+};
+
+exports.getAdminDashboardStats = async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ message: "Access denied. Admins only." });
+    }
+    const { vendorId, userId } = req.query;
+    const orderFilter = {};
+    const paymentFilter = {};
+
+    if (vendorId) orderFilter.vendor = vendorId;
+    if (userId) orderFilter.user = userId;
+
+    if (userId) paymentFilter.user = userId;
+
+    // إجمالي الطلبات والمبيعات
+    const ordersStats = await Order.aggregate([
+      { $match: orderFilter },
+      {
+        $group: {
+          _id: null,
+          totalOrders: { $sum: 1 },
+          totalRevenue: { $sum: "$totalPrice" },
+          totalAdminCommission: { $sum: "$adminCommission" },
+        },
+      },
+    ]);
+
+    // عدد الطلبات حسب الحالة
+    const ordersByStatus = await Order.aggregate([
+      { $match: orderFilter },
+      { $group: { _id: "$orderStatus", count: { $sum: 1 } } },
+    ]);
+
+    // عدد المدفوعات حسب الحالة
+    const paymentsByStatus = await Payment.aggregate([
+      { $match: paymentFilter },
+      { $group: { _id: "$status", count: { $sum: 1 } } },
+    ]);
+
+    // إجمالي المدفوعات المكتملة
+    const totalPaidPayments = await Payment.aggregate([
+      { $match: { status: "paid", ...paymentFilter } },
+      { $group: { _id: null, totalPaid: { $sum: "$amount" } } },
+    ]);
+
+    res.json({
+      success: true,
+      totalOrders: ordersStats[0]?.totalOrders || 0,
+      totalRevenue: ordersStats[0]?.totalRevenue || 0,
+      totalAdminCommission: ordersStats[0]?.totalAdminCommission || 0,
+      ordersByStatus,
+      paymentsByStatus,
+      totalPaidPayments: totalPaidPayments[0]?.totalPaid || 0,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 };
