@@ -228,6 +228,12 @@ const getProducts = async (req, res) => {
       productModel.countDocuments(filter),
     ]);
 
+  // أضف حالة outOfStock لكل منتج
+    const productsWithStatus = products.map(p => ({
+      ...p.toObject(),
+      outOfStock: p.stock === 0
+    }));
+
     const totalPages = Math.ceil(total / limit);
     const hasNextPage = page < totalPages;
     const hasPrevPage = page > 1;
@@ -241,7 +247,7 @@ const getProducts = async (req, res) => {
       count: products.length, // number of products in this page
       hasNextPage,
       hasPrevPage,
-      products,       // actual products data
+      products: productsWithStatus // actual products data with outOfStock flag
     })
 
 
@@ -278,6 +284,16 @@ const getProductByID = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Product not found"
+      });
+    }
+
+        // 🔥 Check stock
+    if (product.stock === 0) {
+      return res.status(200).json({
+        success: true,
+        message: "Product is out of stock",
+        outOfStock: true,
+        data: product
       });
     }
 
