@@ -3,9 +3,6 @@ const router = express.Router();
 const { protect } = require("../middleware/authMiddleware");
 const { authorizeRole } = require("../middleware/roleMiddleware");
 const {
-  getAllVendors,
-  deleteAnyVendor,
-  getAnyVendorProducts,
   createVendor,
   updateVendor,
   deleteVendor,
@@ -13,17 +10,6 @@ const {
   getVendorProfile,
   getVendorDashboard,
 } = require("../controllers/vendorController");
-
-// =====================
-// Admin Routes
-// =====================
-
-// جلب كل البائعين (Admin only)
-router.get("/allVendors", protect, authorizeRole("admin"), getAllVendors); 
-// حذف أي بائع بواسطة الـ admin
-router.delete("/delete/:id", protect, authorizeRole("admin"), deleteAnyVendor); 
-// جلب منتجات أي بائع بواسطة الـ admin
-router.get("/getProducts/:id", protect, authorizeRole("admin"), getAnyVendorProducts);
 
 // =====================
 // Vendor / User Routes
