@@ -1,0 +1,6 @@
+{
+  "sendMessageRequired": "Please send your message 👋",
+  "unclearRequest": "Your request is not clear, please explain more 💡",
+  "noResultsFound": "I couldn't find any products matching your request.",
+  "productsFound": "Here are some products I found for you 🎯"
+}
