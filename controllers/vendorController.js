@@ -109,46 +109,6 @@ const updateVendor = async (req, res) => {
   }
 };
 
-
-    // جلب المنتجات المرتبطة بالـ vendor (للتعامل مع الملفات قبل الحذف)
-    const products = await productModel
-      .find({ vendor: vendor._id })
-      .session(session);
-
-    // احذف ملفات كل منتج (S3/local...) — هذه العملية لا تعتمد على الـ session لأنها خارج Mongo
-    for (const p of products) {
-      // لو عندك حاجة تعتمد على الشبكة أو S3: await deleteFromS3(p)
-      await deleteProductFiles(p);
-    }
-
-    // احذف سجلات المنتجات من DB
-    await productModel.deleteMany({ vendor: vendor._id }).session(session);
-
-    // احذف حساب الـ vendor
-    await vendorModel.deleteOne({ _id: vendor._id }).session(session);
-
-    // ارجع دور المستخدم إلى "user"
-    await userModel
-      .findByIdAndUpdate(req.user.id, { role: "user" }, { session });
-
-    await session.commitTransaction();
-    session.endSession();
-
-    res.status(200).json({
-      success: true,
-      message: "Vendor account and their products deleted successfully",
-    });
-  } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
-    res.status(500).json({
-      success: false,
-      message: "Error deleting vendor",
-      error: error.message,
-    });
-  }
-};
-
 // Get all products for this vendor
 const getVendorProducts = async (req, res) => {
   try {
