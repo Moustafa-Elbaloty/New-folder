@@ -128,5 +128,124 @@ const deleteUser = async (req, res) => {
   }
 };
 
+const getUserDashboard = async (req, res) => {
+  try {
+    const userId = req.user.id; // من الـ authentication middleware
+    
+    // جلب بيانات المستخدم بدون password
+    const user = await User.findById(userId).select("-password");
+    
+    if (!user) {
+      return res.status(404).json({ 
+        success: false,
+        message: "User not found" 
+      });
+    }
 
-module.exports = { getAllUsers, updateUser, deleteUser, getUser };
+    // التحقق من أن الحساب غير محظور
+    if (user.isBlocked) {
+      return res.status(403).json({ 
+        success: false,
+        message: "Account is blocked" 
+      });
+    }
+
+    // جلب الطلبات الخاصة بالمستخدم
+    const orders = await Order.find({ user: userId })
+      .sort({ createdAt: -1 })
+      .populate({
+        path: "items.product",
+        select: "name price images category"
+      })
+      .populate("vendor", "name email");
+
+    // حساب الإحصائيات
+    const totalOrders = orders.length;
+    const totalSpent = orders.reduce((sum, order) => sum + order.totalPrice, 0);
+    
+    const deliveredOrders = orders.filter(o => o.orderStatus === "delivered").length;
+    const pendingOrders = orders.filter(o => o.orderStatus === "pending").length;
+    const processingOrders = orders.filter(o => o.orderStatus === "processing").length;
+    const shippedOrders = orders.filter(o => o.orderStatus === "shipped").length;
+    const cancelledOrders = orders.filter(o => o.orderStatus === "cancelled").length;
+
+    // إحصائيات الدفع
+    const paidOrders = orders.filter(o => o.paymentStatus === "paid").length;
+    const pendingPayments = orders.filter(o => o.paymentStatus === "pending").length;
+    const failedPayments = orders.filter(o => o.paymentStatus === "failed").length;
+
+    // الحصول على العنوان الافتراضي
+    const defaultAddress = user.addresses.find(addr => addr.isDefault);
+
+    // تنسيق الطلبات للعرض
+    const formattedOrders = orders.map(order => ({
+      id: order._id,
+      orderNumber: `#ORD-${order._id.toString().slice(-6).toUpperCase()}`,
+      items: order.items.map(item => ({
+        productId: item.product?._id,
+        productName: item.product?.name,
+        productImage: item.product?.images?.[0],
+        quantity: item.quantity,
+        price: item.price,
+        totalItemPrice: item.totalItemPrice
+      })),
+      totalPrice: order.totalPrice,
+      orderStatus: order.orderStatus,
+      paymentStatus: order.paymentStatus,
+      paymentMethod: order.paymentMethod,
+      vendor: order.vendor ? {
+        id: order.vendor._id,
+        name: order.vendor.name
+      } : null,
+      createdAt: order.createdAt,
+      updatedAt: order.updatedAt
+    }));
+
+    // Response
+    res.status(200).json({
+      success: true,
+      data: {
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          role: user.role,
+          isEmailVerified: user.isEmailVerified,
+          lastLogin: user.lastLogin,
+          createdAt: user.createdAt,
+          defaultAddress: defaultAddress || null,
+          totalAddresses: user.addresses.length
+        },
+        stats: {
+          orders: {
+            total: totalOrders,
+            delivered: deliveredOrders,
+            pending: pendingOrders,
+            processing: processingOrders,
+            shipped: shippedOrders,
+            cancelled: cancelledOrders
+          },
+          payments: {
+            paid: paidOrders,
+            pending: pendingPayments,
+            failed: failedPayments
+          },
+          totalSpent
+        },
+        recentOrders: formattedOrders.slice(0, 5), // آخر 5 طلبات
+        allOrders: formattedOrders
+      }
+    });
+
+  } catch (err) {
+    console.error("Error fetching dashboard:", err);
+    res.status(500).json({ 
+      success: false,
+      message: "Server error while fetching dashboard",
+      error: process.env.NODE_ENV === "development" ? err.message : undefined
+    });
+  }
+};
+module.exports = { getAllUsers, updateUser, deleteUser, getUser, getUserDashboard };
+
