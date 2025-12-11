@@ -19,13 +19,7 @@ router.put("/reset-password/:token", resetPassword);
 
 router.put("/change-password", protect, changePassword);
 router.post("/logout", protect, logout);
-router.get("/profile", protect, (req, res) => {
-  res.json({
-    message: `مرحبًا يا ${req.user.name} `,
-    email: req.user.email,
-    role: req.user.role,
-  });
-});
+
 
 
 module.exports = router;
