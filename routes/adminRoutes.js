@@ -11,7 +11,7 @@ const {getAllPayments,  getAdminDashboardStats} = require("../controllers/paymen
 
 const { getAllUsers, updateUser, deleteUser, getUser } = require("../controllers/userController");
 
-const { getAllVendors, deleteAnyVendor, getVendorProducts} = require("../controllers/vendorController");
+const { getAllVendors, deleteVendor, getVendorProducts} = require("../controllers/vendorController");
 
 const { authorizeRole } = require("../middleware/roleMiddleware");
 const { protect } = require("../middleware/authMiddleware");
@@ -91,7 +91,7 @@ router.delete("/deleteUser/:id", protect, authorizeRole("admin"), deleteUser);
 router.get("/allVendors", protect, authorizeRole("admin"), getAllVendors);
 
 // REQ: DELETE /api/admin/deleteVendor/:id
-router.delete("/deleteVendor/:id", protect, authorizeRole("admin"), deleteAnyVendor);
+router.delete("/deleteVendor/:id", protect, authorizeRole("admin"), deleteVendor);
 
 // REQ: GET /api/admin/vendors/products/:id
 router.get( "/vendors/products/:id", protect, authorizeRole("admin"), getVendorProducts);
