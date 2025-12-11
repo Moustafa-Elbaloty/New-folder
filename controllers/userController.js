@@ -1,4 +1,5 @@
 const User = require("../models/userModel");
+const Order = require("../models/orderModel");
 const bcrypt = require("bcryptjs");
 
 // 🟢 Get all users (Admins only)
@@ -248,4 +249,5 @@ const getUserDashboard = async (req, res) => {
   }
 };
 module.exports = { getAllUsers, updateUser, deleteUser, getUser, getUserDashboard };
+
 
